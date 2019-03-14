@@ -58,21 +58,28 @@ public abstract class StratAphorDatabase extends RoomDatabase {
     @Override
     public void onCreate(@NonNull SupportSQLiteDatabase db) {
       super.onCreate(db);
-      new PreloadTask()
-          .setSuccessListener((sayings) -> {
-            //TODO Do something with sayings
-          } )
-          .execute();
+      new PreloadTask().execute();
     }
 
+    @Override
+    public void onOpen(@NonNull SupportSQLiteDatabase db) {
+      super.onOpen(db);
+      StratAphorDatabase database = StratAphorDatabase.getInstance();
+      new BaseFluentAsyncTask<Void, Void, List<Saying>, List<Saying>>()
+          .setPerformer((ignore) -> database.getSayingDao().findAll())
+          .setSuccessListener((sayings) -> {
+            RandomSaying.getInstance().getSayings().addAll(sayings);
+          })
+          .execute();
+    }
   }
 
   private static class PreloadTask
-      extends BaseFluentAsyncTask<Void, Void, List<Saying>, List<Saying>> {
+      extends BaseFluentAsyncTask<Void, Void, Void, Void> {
 
     @Nullable
     @Override
-    protected List<Saying> perform(Void... voids) throws TaskException {
+    protected Void perform(Void... voids) throws TaskException {
       Context context = StratAphorApplication.getInstance().getApplicationContext();
       StratAphorDatabase database = StratAphorDatabase.getInstance();
       try (
@@ -87,12 +94,12 @@ public abstract class StratAphorDatabase extends RoomDatabase {
           String resourceName = record.get(1);
           long sourceId = database.getSourceDao().insert(source);
           sayings.addAll(loadSayings(sourceId, resourceName));
-          database.getSayingDao().insert(sayings);
         }
+        database.getSayingDao().insert(sayings);
+        return null;
       } catch (IOException e) {
         throw new TaskException(e);
       }
-      return database.getSayingDao().findAll();
     }
 
     private List<Saying> loadSayings(long sourceId, String resourceName) {
@@ -112,7 +119,6 @@ public abstract class StratAphorDatabase extends RoomDatabase {
             saying.setSourceId(sourceId);
             saying.setText(line);
             sayings.add(saying);
-
           }
         }
         return sayings;
